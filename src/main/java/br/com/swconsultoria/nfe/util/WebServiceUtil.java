@@ -10,9 +10,13 @@ import br.com.swconsultoria.nfe.dom.enuns.EstadosEnum;
 import br.com.swconsultoria.nfe.dom.enuns.ServicosEnum;
 import br.com.swconsultoria.nfe.exception.NfeException;
 import lombok.extern.java.Log;
-import org.ini4j.Wini;
+import org.apache.commons.configuration2.INIConfiguration;
+import org.apache.commons.configuration2.builder.fluent.Configurations; // This will be unused, but keep for now to minimize diff noise if other parts of Configurations are used elsewhere.
+import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import java.io.*;
+import java.io.InputStreamReader; // Added
+import java.nio.charset.StandardCharsets; // Added
 import java.util.logging.Logger;
 
 /**
@@ -65,11 +69,19 @@ public class WebServiceUtil {
                 is = WebServiceUtil.class.getResourceAsStream("/WebServicesNfe.ini");
             }
 
-            Wini ini = new Wini();
-            ini.getConfig().setLowerCaseOption(true);
-            ini.load(is);
-            is.close();
-            String url = ini.get(secao, "usar");
+            INIConfiguration iniConfig = new INIConfiguration();
+            // It's important to use a Reader with INIConfiguration's read method.
+            // The InputStream 'is' should be wrapped in an InputStreamReader.
+            // Assuming UTF-8 as it's common for .ini files in this project (from pom.xml).
+            try (InputStreamReader reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
+                 iniConfig.read(reader);
+            } // reader and 'is' (if it was opened by this try-with-resources) will be closed here.
+              // If 'is' was from getResourceAsStream, the responsibility of closing it might be tricky.
+              // However, InputStreamReader wrapping it and being closed should suffice.
+
+            // Apache Commons Configuration handles case-insensitivity by default for keys.
+            // Sections are typically matched as they are in the file.
+            String url = iniConfig.getString(secao + ".usar");
 
             //URLS CONSULTA CADASTO
             if (tipoServico.equals(ServicosEnum.CONSULTA_CADASTRO) && (
@@ -111,7 +123,9 @@ public class WebServiceUtil {
                 secao = url;
             }
 
-            url = ini.get(secao, tipoServico.getServico().toLowerCase());
+            // Construct the key for fetching the service URL
+            String serviceKey = secao + "." + tipoServico.getServico().toLowerCase();
+            url = iniConfig.getString(serviceKey);
 
             ObjetoUtil.verifica(url).orElseThrow(() -> new NfeException(
                     "WebService de " + tipoServico + " não encontrado para " + config.getEstado().getNome()));
@@ -120,6 +134,8 @@ public class WebServiceUtil {
 
             return url;
 
+        } catch (ConfigurationException e) {
+            throw new NfeException("Erro ao ler arquivo de configuraçãoWebService: " + e.getMessage(), e);
         } catch (IOException e) {
             throw new NfeException(e.getMessage(),e);
         }
