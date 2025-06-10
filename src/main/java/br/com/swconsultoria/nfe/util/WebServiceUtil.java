@@ -34,12 +34,23 @@ public class WebServiceUtil {
         if (sectionConfig == null || sectionConfig.isEmpty() || targetKey == null) {
             return null;
         }
+        // First, try direct access with the targetKey, relying on SubnodeConfiguration's case-insensitivity
+        String value = sectionConfig.getString(targetKey, null);
+        if (value != null) {
+            // log.fine("getStringIgnoreCase: Direct lookup for targetKey '" + targetKey + "' found value."); // Optional fine log
+            return value;
+        }
+
+        // If direct access failed, iterate and check with equalsIgnoreCase
         for (Iterator<String> it = sectionConfig.getKeys(); it.hasNext(); ) {
             String key = it.next();
-            if (targetKey.equalsIgnoreCase(key)) {
-                return sectionConfig.getString(key);
+            String normalizedIteratedKey = key.replace("..", "."); // Normalize ".." to "." from iterated key
+            if (targetKey.equalsIgnoreCase(normalizedIteratedKey)) {
+                // log.fine("getStringIgnoreCase: Iterated match found for targetKey '" + targetKey + "' with INI key '" + key + "' (normalized to '" + normalizedIteratedKey + "')."); // Optional fine log
+                return sectionConfig.getString(key); // Use original iterated key
             }
         }
+        // log.fine("getStringIgnoreCase: No match found for targetKey '" + targetKey + "'."); // Optional fine log
         return null;
     }
 
@@ -132,6 +143,7 @@ public class WebServiceUtil {
                     tipoServico.equals(ServicosEnum.EPEC)) {
                 lookupSectionKey = config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "NFe_AN_H" : "NFe_AN_P";
                 SubnodeConfiguration nationalSectionConfig = iniConfig.getSection(lookupSectionKey);
+                // log.info("Looking for National Service key: '" + tipoServico.getServico() + "' in section '" + lookupSectionKey + "'"); // Optional fine log
                 finalUrl = getStringIgnoreCase(nationalSectionConfig, tipoServico.getServico());
             } else if (!tipoServico.equals(ServicosEnum.URL_CONSULTANFCE) &&
                     !tipoServico.equals(ServicosEnum.URL_QRCODE) &&
@@ -147,20 +159,23 @@ public class WebServiceUtil {
                     lookupSectionKey = tipoDocumento.getTipo() + "_SVC-AN_" + (config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "H" : "P");
                 }
                 SubnodeConfiguration svcSectionConfig = iniConfig.getSection(lookupSectionKey);
+                // log.info("Looking for SVC service key: '" + tipoServico.getServico() + "' in section '" + lookupSectionKey + "'"); // Optional fine log
                 finalUrl = getStringIgnoreCase(svcSectionConfig, tipoServico.getServico());
             } else if (ObjetoUtil.verifica(usarValue).isPresent() &&
                     !tipoServico.equals(ServicosEnum.URL_CONSULTANFCE) &&
                     !tipoServico.equals(ServicosEnum.URL_QRCODE)) {
                 lookupSectionKey = usarValue;
                 SubnodeConfiguration usarRedirectedSectionConfig = iniConfig.getSection(lookupSectionKey);
+                // log.info("Looking for service key: '" + tipoServico.getServico() + "' in 'Usar' redirected section '" + lookupSectionKey + "'"); // Optional fine log
                 finalUrl = getStringIgnoreCase(usarRedirectedSectionConfig, tipoServico.getServico());
             } else {
-                // Default case: lookupSectionKey is already the initial 'secao'
+                // Default case: lookupSectionKey is already the initial 'secao' (or was not overridden by 'Usar' for QR/Consulta)
                 SubnodeConfiguration currentSectionConfigToUse = iniConfig.getSection(lookupSectionKey);
+                // log.info("Looking for service key: '" + tipoServico.getServico() + "' in section '" + lookupSectionKey + "'"); // Optional fine log
                 finalUrl = getStringIgnoreCase(currentSectionConfigToUse, tipoServico.getServico());
             }
 
-            final String finalLookupSectionKeyForLambda = lookupSectionKey;
+            final String finalLookupSectionKeyForLambda = lookupSectionKey; // Essential for lambda
             ObjetoUtil.verifica(finalUrl).orElseThrow(() -> new NfeException(
                     "WebService de " + tipoServico + " não encontrado para " + config.getEstado().getNome() + " na seção " + finalLookupSectionKeyForLambda));
 
