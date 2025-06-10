@@ -11,12 +11,13 @@ import br.com.swconsultoria.nfe.dom.enuns.ServicosEnum;
 import br.com.swconsultoria.nfe.exception.NfeException;
 import lombok.extern.java.Log;
 import org.apache.commons.configuration2.INIConfiguration;
-import org.apache.commons.configuration2.builder.fluent.Configurations; // This will be unused, but keep for now to minimize diff noise if other parts of Configurations are used elsewhere.
+import org.apache.commons.configuration2.SubnodeConfiguration; // Added
 import org.apache.commons.configuration2.ex.ConfigurationException;
 
 import java.io.*;
-import java.io.InputStreamReader; // Added
-import java.nio.charset.StandardCharsets; // Added
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator; // Added
 import java.util.logging.Logger;
 
 /**
@@ -28,6 +29,19 @@ import java.util.logging.Logger;
 public class WebServiceUtil {
 
     private final static Logger logger = Logger.getLogger(WebServiceUtil.class.getName());
+
+    private static String getStringIgnoreCase(SubnodeConfiguration sectionConfig, String targetKey) {
+        if (sectionConfig == null || sectionConfig.isEmpty() || targetKey == null) {
+            return null;
+        }
+        for (Iterator<String> it = sectionConfig.getKeys(); it.hasNext(); ) {
+            String key = it.next();
+            if (targetKey.equalsIgnoreCase(key)) {
+                return sectionConfig.getString(key);
+            }
+        }
+        return null;
+    }
 
     /**
      * Retorna a URL para consulta de operações do SEFAZ.<br>
@@ -71,19 +85,36 @@ public class WebServiceUtil {
 
             INIConfiguration iniConfig = new INIConfiguration();
             // It's important to use a Reader with INIConfiguration's read method.
-            // The InputStream 'is' should be wrapped in an InputStreamReader.
-            // Assuming UTF-8 as it's common for .ini files in this project (from pom.xml).
             try (InputStreamReader reader = new InputStreamReader(is, StandardCharsets.UTF_8)) {
-                 iniConfig.read(reader);
-            } // reader and 'is' (if it was opened by this try-with-resources) will be closed here.
-              // If 'is' was from getResourceAsStream, the responsibility of closing it might be tricky.
-              // However, InputStreamReader wrapping it and being closed should suffice.
+                iniConfig.read(reader);
+            } finally {
+                // Ensure 'is' is closed if it was not from getResourceAsStream or if reader doesn't close it.
+                // If 'is' is from getResourceAsStream, it's generally managed by the class loader, but closing doesn't hurt.
+                // If 'is' is a FileInputStream, it MUST be closed.
+                // The InputStreamReader try-with-resources should close 'is', so this might be redundant but safe.
+                if (is != null) {
+                    try {
+                        is.close();
+                    } catch (IOException e) {
+                        // Log or ignore, as we are already in a try-catch block for NfeException
+                        log.fine("Error closing InputStream: " + e.getMessage());
+                    }
+                }
+            }
 
-            // Apache Commons Configuration handles case-insensitivity by default for keys.
-            // Sections are typically matched as they are in the file.
-            String url = iniConfig.getString(secao + ".usar");
+            // The variable 'secao' from the outer scope (first line in try block) is the true original section name.
+            // We'll use 'lookupSectionKey' for the actual key to use for INI section lookups,
+            // which might be modified by 'Usar', SVC, or AN logic.
+            String lookupSectionKey = secao; // Initialize with the original 'secao'
 
-            //URLS CONSULTA CADASTO
+            SubnodeConfiguration initialSectionConfig = iniConfig.getSection(lookupSectionKey);
+            String usarValue = null;
+            if (initialSectionConfig != null && !initialSectionConfig.isEmpty()) {
+                usarValue = getStringIgnoreCase(initialSectionConfig, "Usar");
+            }
+
+            String finalUrl = null;
+
             if (tipoServico.equals(ServicosEnum.CONSULTA_CADASTRO) && (
                     config.getEstado().equals(EstadosEnum.PA) ||
                             config.getEstado().equals(EstadosEnum.AM) ||
@@ -96,43 +127,45 @@ public class WebServiceUtil {
                             config.getEstado().equals(EstadosEnum.SE) ||
                             config.getEstado().equals(EstadosEnum.TO))) {
                 throw new NfeException("Estado não possui Consulta Cadastro.");
-                // URLS de ambiente nacional
-            } else if (tipoServico.equals(ServicosEnum.DISTRIBUICAO_DFE)
-                    || tipoServico.equals(ServicosEnum.MANIFESTACAO)
-                    || tipoServico.equals(ServicosEnum.EPEC)) {
-                secao = config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "NFe_AN_H" : "NFe_AN_P";
-            } else if (!tipoServico.equals(ServicosEnum.URL_CONSULTANFCE)
-                    && !tipoServico.equals(ServicosEnum.URL_QRCODE) 
-                    && config.isContigenciaSVC() && tipoDocumento.equals(DocumentoEnum.NFE)) {
-                // SVC-RS
-                if (config.getEstado().equals(EstadosEnum.GO) || config.getEstado().equals(EstadosEnum.AM)
-                        || config.getEstado().equals(EstadosEnum.BA) || config.getEstado().equals(EstadosEnum.CE)
-                        || config.getEstado().equals(EstadosEnum.MA) || config.getEstado().equals(EstadosEnum.MS)
-                        || config.getEstado().equals(EstadosEnum.MT) || config.getEstado().equals(EstadosEnum.PA)
-                        || config.getEstado().equals(EstadosEnum.PE) || config.getEstado().equals(EstadosEnum.PI)
-                        || config.getEstado().equals(EstadosEnum.PR)) {
-                    secao = tipoDocumento.getTipo() + "_SVRS_"
-                            + (config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "H" : "P");
-                    // SVC-AN
+            } else if (tipoServico.equals(ServicosEnum.DISTRIBUICAO_DFE) ||
+                    tipoServico.equals(ServicosEnum.MANIFESTACAO) ||
+                    tipoServico.equals(ServicosEnum.EPEC)) {
+                lookupSectionKey = config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "NFe_AN_H" : "NFe_AN_P";
+                SubnodeConfiguration nationalSectionConfig = iniConfig.getSection(lookupSectionKey);
+                finalUrl = getStringIgnoreCase(nationalSectionConfig, tipoServico.getServico());
+            } else if (!tipoServico.equals(ServicosEnum.URL_CONSULTANFCE) &&
+                    !tipoServico.equals(ServicosEnum.URL_QRCODE) &&
+                    config.isContigenciaSVC() && tipoDocumento.equals(DocumentoEnum.NFE)) {
+                if (config.getEstado().equals(EstadosEnum.GO) || config.getEstado().equals(EstadosEnum.AM) ||
+                        config.getEstado().equals(EstadosEnum.BA) || config.getEstado().equals(EstadosEnum.CE) ||
+                        config.getEstado().equals(EstadosEnum.MA) || config.getEstado().equals(EstadosEnum.MS) ||
+                        config.getEstado().equals(EstadosEnum.MT) || config.getEstado().equals(EstadosEnum.PA) ||
+                        config.getEstado().equals(EstadosEnum.PE) || config.getEstado().equals(EstadosEnum.PI) ||
+                        config.getEstado().equals(EstadosEnum.PR)) {
+                    lookupSectionKey = tipoDocumento.getTipo() + "_SVRS_" + (config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "H" : "P");
                 } else {
-                    secao = tipoDocumento.getTipo() + "_SVC-AN_"
-                            + (config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "H" : "P");
+                    lookupSectionKey = tipoDocumento.getTipo() + "_SVC-AN_" + (config.getAmbiente().equals(AmbienteEnum.HOMOLOGACAO) ? "H" : "P");
                 }
-            }else if (!tipoServico.equals(ServicosEnum.URL_CONSULTANFCE)
-                    && !tipoServico.equals(ServicosEnum.URL_QRCODE) && ObjetoUtil.verifica(url).isPresent()) {
-                secao = url;
+                SubnodeConfiguration svcSectionConfig = iniConfig.getSection(lookupSectionKey);
+                finalUrl = getStringIgnoreCase(svcSectionConfig, tipoServico.getServico());
+            } else if (ObjetoUtil.verifica(usarValue).isPresent() &&
+                    !tipoServico.equals(ServicosEnum.URL_CONSULTANFCE) &&
+                    !tipoServico.equals(ServicosEnum.URL_QRCODE)) {
+                lookupSectionKey = usarValue;
+                SubnodeConfiguration usarRedirectedSectionConfig = iniConfig.getSection(lookupSectionKey);
+                finalUrl = getStringIgnoreCase(usarRedirectedSectionConfig, tipoServico.getServico());
+            } else {
+                // Default case: lookupSectionKey is already the initial 'secao'
+                SubnodeConfiguration currentSectionConfigToUse = iniConfig.getSection(lookupSectionKey);
+                finalUrl = getStringIgnoreCase(currentSectionConfigToUse, tipoServico.getServico());
             }
 
-            // Construct the key for fetching the service URL
-            String serviceKey = secao + "." + tipoServico.getServico().toLowerCase();
-            url = iniConfig.getString(serviceKey);
+            final String finalLookupSectionKeyForLambda = lookupSectionKey;
+            ObjetoUtil.verifica(finalUrl).orElseThrow(() -> new NfeException(
+                    "WebService de " + tipoServico + " não encontrado para " + config.getEstado().getNome() + " na seção " + finalLookupSectionKeyForLambda));
 
-            ObjetoUtil.verifica(url).orElseThrow(() -> new NfeException(
-                    "WebService de " + tipoServico + " não encontrado para " + config.getEstado().getNome()));
-
-            log.info("[URL]: " + tipoServico + ": " + url);
-
-            return url;
+            log.info("[URL]: " + tipoServico + ": " + finalUrl);
+            return finalUrl;
 
         } catch (ConfigurationException e) {
             throw new NfeException("Erro ao ler arquivo de configuraçãoWebService: " + e.getMessage(), e);
