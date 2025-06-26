@@ -17,6 +17,9 @@ import br.com.swconsultoria.nfe.schema_4.retConsStatServ.TRetConsStatServ;
 import br.com.swconsultoria.nfe.util.ConfiguracoesUtil;
 
 /**
+ * Classe principal para realizar as operações de Nota Fiscal Eletrônica (NFe).
+ * Define os métodos para cada tipo de evento e comunicação com os WebServices.
+ *
  * @author Samuel Oliveira - samuel@swconsultoria.com.br - www.swconsultoria.com.br
  */
 public class Nfe {

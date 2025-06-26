@@ -29,9 +29,11 @@ import java.util.regex.Pattern; // Added for parseIniFile
 
 
 /**
- * @author Samuel Oliveira
+ * Utilitário para montagem de URLs de consulta de serviços da SEFAZ.
+ * Esta classe é responsável por carregar e interpretar o arquivo {@code WebServicesNfe.ini}
+ * para determinar a URL correta para um dado serviço, estado, ambiente e tipo de documento.
  *
- * Classe responsávelem montar as URL's de consulta de serviços do SEFAZ.
+ * @author Samuel Oliveira
  */
 @Log
 public class WebServiceUtil {
@@ -154,25 +156,25 @@ public class WebServiceUtil {
 
 
     /**
-     * Retorna a URL para consulta de operações do SEFAZ.<br>
-     *
+     * Retorna a URL para consulta de Web Services da SEFAZ, com base nas configurações fornecidas.
      * <p>
-     * O método carrega o arquivo <b>WebServicesNfe.ini</b> (utilizando um parser customizado)
-     * que contêm as URL's de operações do SEFAZ, busca pela seção no arquivo .ini que
-     * corresponda com os argumentos <b>tipo</b>, <b>config</b>, <b>servico</b>
-     * e retorna essa URL.
+     * Este método realiza a leitura e interpretação do arquivo {@code WebServicesNfe.ini}
+     * (seja um arquivo customizado ou o padrão, utilizando um parser interno) para determinar a URL correta.
+     * A lógica considera o tipo de documento (NFe/NFCe), estado (UF), ambiente (Produção/Homologação),
+     * o serviço específico, e possíveis redirecionamentos ou contingências (SVC, AN).
      * </p>
      *
-     * @param config interface que contêm os dados necessários para a comunicação.
-     * @param tipoDocumento {@link DocumentoEnum#NFE} ou {@link DocumentoEnum#NFCE}.
-     * @param tipoServico é a operação que se deseja fazer.<br>
-     * Ex.: para consultas status deserviço no ambiente de produção
-     * use ServicosEnum.NfeStatusServico_4.00
-     *
-     * @return url String que representa a URL do serviço.
-     * @throws NfeException
-     *
+     * @param config As configurações da NFe {@link ConfiguracoesNfe}, que incluem o estado, ambiente e
+     *               opcionalmente um caminho para um arquivo {@code WebServicesNfe.ini} customizado.
+     * @param tipoDocumento O tipo de documento fiscal, conforme {@link DocumentoEnum} (NFE ou NFCE).
+     * @param tipoServico O serviço desejado, conforme {@link ServicosEnum}.
+     * @return A string da URL para o Web Service consultado.
+     * @throws NfeException Se a URL não for encontrada, se houver erro ao carregar ou parsear o
+     *                      arquivo de configuração, ou em outras situações de erro específicas
+     *                      (como um estado não possuir um determinado serviço).
      * @see ConfiguracoesNfe
+     * @see DocumentoEnum
+     * @see ServicosEnum
      */
     public static String getUrl(ConfiguracoesNfe config, DocumentoEnum tipoDocumento, ServicosEnum tipoServico) throws NfeException {
         InputStream is = null;

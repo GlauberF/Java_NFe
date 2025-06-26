@@ -248,6 +248,7 @@
                 </executions>
                 <configuration>
                     <failOnError>false</failOnError>
+                    <failOnWarning>false</failOnWarning> <!-- Add this line -->
                 </configuration>
             </plugin>
             <plugin>
