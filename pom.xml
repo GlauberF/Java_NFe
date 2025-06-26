@@ -248,7 +248,8 @@
                 </executions>
                 <configuration>
                     <failOnError>false</failOnError>
-                    <failOnWarning>false</failOnWarning> <!-- Add this line -->
+                    <failOnWarning>false</failOnWarning>
+                    <additionalOptions>-Xdoclint:none</additionalOptions> <!-- Add this line -->
                 </configuration>
             </plugin>
             <plugin>

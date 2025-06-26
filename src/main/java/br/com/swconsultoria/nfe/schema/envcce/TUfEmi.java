@@ -6,10 +6,10 @@ import javax.xml.bind.annotation.XmlType;
 
 
 /**
- * <p>Classe Java de TUfEmi.</p>
- *
- * <p>O seguinte fragmento do esquema especifica o conteúdo esperado contido dentro desta classe.</p>
+ * <p>Classe Java de TUfEmi.
  * 
+ * <p>O seguinte fragmento do esquema especifica o conteúdo esperado contido dentro desta classe.
+ * <p>
  * <pre>
  * &lt;simpleType name="TUfEmi"&gt;
  *   &lt;restriction base="{http://www.w3.org/2001/XMLSchema}string"&gt;
